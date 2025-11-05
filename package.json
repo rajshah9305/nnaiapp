@@ -1,0 +1,49 @@
+{
+  "name": "raj-ai",
+  "version": "1.0.0",
+  "description": "AI-powered NLP-to-App generator - Transform ideas into complete, production-ready applications",
+  "private": true,
+  "author": "RAJ AI",
+  "license": "PROPRIETARY",
+  "keywords": [
+    "ai",
+    "code-generation",
+    "nlp",
+    "nextjs",
+    "react",
+    "gemini",
+    "app-generator",
+    "no-code"
+  ],
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "file-saver": "^2.0.5",
+    "jszip": "^3.10.1",
+    "next": "^15.1.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/typography": "^0.5.10",
+    "@tailwindcss/forms": "^0.5.7",
+    "@tailwindcss/aspect-ratio": "^0.4.2",
+    "@tailwindcss/container-queries": "^0.1.1",
+    "@types/file-saver": "^2.0.7",
+    "@types/node": "^20.10.5",
+    "@types/react": "^18.2.45",
+    "@types/react-dom": "^18.2.18",
+    "autoprefixer": "^10.4.16",
+    "eslint": "^8.56.0",
+    "eslint-config-next": "^14.0.4",
+    "postcss": "^8.4.32",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.3.3"
+  }
+}
