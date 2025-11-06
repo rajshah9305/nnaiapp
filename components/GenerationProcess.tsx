@@ -3,42 +3,20 @@
 import { useState, useEffect, useRef } from 'react'
 import LivePreview from './LivePreview'
 import ReviewExport from './ReviewExport'
-import type { GeneratedFile, GenerationProcessProps } from '@/types'
-
-// Utility functions
-const formatCodeStream = (text: string): string => {
-  const syntaxHighlighting = {
-    filePath: ['#f97316', '#fbbf24'],
-    content: '#f97316',
-    brackets: '#94a3b8',
-    properties: '#a78bfa',
-    strings: '#86efac',
-    values: '#fb923c'
-  }
-
-  return text
-    .replace(/"filePath"\s*:\s*"([^"]+)"/g, `<span style="color:${syntaxHighlighting.filePath[0]}">"filePath"</span>: <span style="color:${syntaxHighlighting.filePath[1]}">"$1"</span>`)
-    .replace(/"content"\s*:/g, `<span style="color:${syntaxHighlighting.content}">"content"</span>:`)
-    .replace(/[{}\[\]]/g, (match) => `<span style="color:${syntaxHighlighting.brackets}">${match}</span>`)
-    .replace(/"([^"]+)"\s*:/g, `<span style="color:${syntaxHighlighting.properties}">"$1"</span>:`)
-    .replace(/:\s*"([^"]*)"/g, `: <span style="color:${syntaxHighlighting.strings}">"$1"</span>`)
-    .replace(/:\s*(true|false|null|\d+)/g, `: <span style="color:${syntaxHighlighting.values}">$1</span>`)
-}
+import type { GeneratedFile, GenerationProcessProps, GenerationError, FileProgress } from '@/types'
 
 const LoadingSpinner = () => (
-  <div className="flex items-center justify-center h-full animate-fade-in">
-    <div className="text-center space-y-6">
-      <div className="relative inline-block">
-        <div className="w-16 h-16 border-4 border-gray-200 rounded-full"></div>
-        <div className="absolute inset-0 w-16 h-16 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
+  <div className="flex items-center space-x-4 p-4">
+    <div className="relative w-12 h-12">
+      <div className="absolute inset-0 border-4 border-gray-200 rounded-full"></div>
+      <div className="absolute inset-0 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
+    </div>
+    <div className="space-y-2 animate-fade-in [animation-delay:200ms]">
+      <div className="text-black font-semibold text-base">
+        Generating Code
       </div>
-      <div className="space-y-2 animate-fade-in [animation-delay:200ms]">
-        <div className="text-black font-semibold text-base">
-          Generating Code
-        </div>
-        <div className="text-black opacity-70 text-sm">
-          Analyzing requirements and creating files...
-        </div>
+      <div className="text-black opacity-70 text-sm">
+        Analyzing requirements and creating files...
       </div>
     </div>
   </div>
@@ -50,34 +28,45 @@ export default function GenerationProcess({ appName, description, onReset }: Gen
   const [isComplete, setIsComplete] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [currentFile, setCurrentFile] = useState<string>('')
-  const [fileProgress, setFileProgress] = useState<{name: string, status: 'generating' | 'complete'}[]>([])
+  const [fileProgress, setFileProgress] = useState<FileProgress[]>([])
   const [isAIThinking, setIsAIThinking] = useState(true)
   const [showReview, setShowReview] = useState(false)
   const codeContainerRef = useRef<HTMLDivElement>(null)
 
-  // Auto-scroll effect
+  // Auto-scroll effect with debounce
   useEffect(() => {
-    if (codeContainerRef.current) {
-      const shouldScroll = codeContainerRef.current.scrollHeight - codeContainerRef.current.scrollTop < 1000
-      if (shouldScroll) {
-        codeContainerRef.current.scrollTop = codeContainerRef.current.scrollHeight
-      }
+    if (!codeContainerRef.current) return
+    
+    const container = codeContainerRef.current
+    const shouldScroll = container.scrollHeight - container.scrollTop < 1000
+    
+    if (shouldScroll) {
+      const timeoutId = setTimeout(() => {
+        container.scrollTop = container.scrollHeight
+      }, 100)
+      return () => clearTimeout(timeoutId)
     }
   }, [streamedText])
 
   useEffect(() => {
-    let abortController = new AbortController()
+    const abortController = new AbortController()
 
     const generateCode = async () => {
       try {
         const response = await fetch('/api/generate', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'X-Request-Time': new Date().toISOString()
+          },
           body: JSON.stringify({ appName, description }),
           signal: abortController.signal
         })
 
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          throw new Error(errorData.message || `HTTP error! status: ${response.status}`)
+        }
         
         const reader = response.body?.getReader()
         if (!reader) throw new Error('No response body')
@@ -133,11 +122,12 @@ export default function GenerationProcess({ appName, description, onReset }: Gen
                 }
               } catch (parseError) {
                 console.error('Error parsing SSE data:', parseError)
+                setError('Failed to parse server response')
               }
             }
           }
         }
-      } catch (err: any) {
+      } catch (err: GenerationError) {
         if (err.name === 'AbortError') return
         
         const errorMessage = err?.message || 'Generation failed. Please try again.'
@@ -177,16 +167,21 @@ export default function GenerationProcess({ appName, description, onReset }: Gen
                 <div>
                   <h2 className="text-base font-semibold text-gray-900">Code Generation</h2>
                   {currentFile && (
-                    <p className="text-xs text-gray-600 mt-0.5">Generating: {currentFile}</p>
+                    <p className="text-xs text-gray-600 mt-0.5" aria-live="polite">
+                      Generating: {currentFile}
+                    </p>
                   )}
                   {isComplete && !showReview && (
-                    <p className="text-xs text-green-600 mt-0.5">✓ Generation complete</p>
+                    <p className="text-xs text-green-600 mt-0.5" aria-live="polite">
+                      ✓ Generation complete
+                    </p>
                   )}
                 </div>
                 {isComplete && !showReview && (
                   <button
                     onClick={() => setShowReview(true)}
                     className="px-3 py-1.5 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors text-xs font-medium"
+                    aria-label="View generated code"
                   >
                     View Code →
                   </button>
@@ -196,17 +191,19 @@ export default function GenerationProcess({ appName, description, onReset }: Gen
             <div 
               ref={codeContainerRef}
               className="flex-1 overflow-auto p-4 bg-gray-900 code-block-container"
+              role="log"
+              aria-live="polite"
             >
               {isAIThinking ? (
                 <LoadingSpinner />
               ) : error ? (
-                <div className="text-red-400 p-4">
+                <div className="text-red-400 p-4" role="alert">
                   <p className="font-semibold">Error:</p>
                   <p>{error}</p>
                 </div>
               ) : (
                 <pre className="text-sm">
-                  <code dangerouslySetInnerHTML={{ __html: formatCodeStream(streamedText) }} />
+                  <code>{streamedText}</code>
                 </pre>
               )}
             </div>
