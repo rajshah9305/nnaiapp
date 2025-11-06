@@ -33,20 +33,22 @@ export default function GenerationProcess({ appName, description, onReset }: Gen
   const [showReview, setShowReview] = useState(false)
   const codeContainerRef = useRef<HTMLDivElement>(null)
 
-  // Auto-scroll effect with debounce
+// Auto-scroll effect with debounce
   useEffect(() => {
-    if (!codeContainerRef.current) return
+    if (!codeContainerRef.current) return () => {}; // Add return for early exit
     
-    const container = codeContainerRef.current
-    const shouldScroll = container.scrollHeight - container.scrollTop < 1000
+    const container = codeContainerRef.current;
+    const shouldScroll = container.scrollHeight - container.scrollTop < 1000;
     
     if (shouldScroll) {
       const timeoutId = setTimeout(() => {
-        container.scrollTop = container.scrollHeight
-      }, 100)
-      return () => clearTimeout(timeoutId)
+        container.scrollTop = container.scrollHeight;
+      }, 100);
+      return () => clearTimeout(timeoutId);
     }
-  }, [streamedText])
+
+    return () => {}; // Add return for the case when shouldScroll is false
+  }, [streamedText]);
 
   useEffect(() => {
     const abortController = new AbortController()
