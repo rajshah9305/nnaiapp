@@ -3,7 +3,14 @@
 import { useState, useEffect, useRef } from 'react'
 import LivePreview from './LivePreview'
 import ReviewExport from './ReviewExport'
-import type { GeneratedFile, GenerationProcessProps, GenerationError, FileProgress } from '@/types'
+import type { GeneratedFile, GenerationProcessProps, FileProgress } from '@/types'
+
+interface StreamData {
+  error?: string;
+  chunk?: string;
+  type?: 'partial' | 'complete';
+  files?: GeneratedFile[];
+}
 
 const LoadingSpinner = () => (
   <div className="flex items-center space-x-4 p-4">
@@ -33,9 +40,9 @@ export default function GenerationProcess({ appName, description, onReset }: Gen
   const [showReview, setShowReview] = useState(false)
   const codeContainerRef = useRef<HTMLDivElement>(null)
 
-// Auto-scroll effect with debounce
+  // Auto-scroll effect with debounce
   useEffect(() => {
-    if (!codeContainerRef.current) return () => {}; // Add return for early exit
+    if (!codeContainerRef.current) return () => {};
     
     const container = codeContainerRef.current;
     const shouldScroll = container.scrollHeight - container.scrollTop < 1000;
@@ -47,11 +54,12 @@ export default function GenerationProcess({ appName, description, onReset }: Gen
       return () => clearTimeout(timeoutId);
     }
 
-    return () => {}; // Add return for the case when shouldScroll is false
+    return () => {};
   }, [streamedText]);
 
+  // Code generation effect
   useEffect(() => {
-    const abortController = new AbortController()
+    const abortController = new AbortController();
 
     const generateCode = async () => {
       try {
@@ -63,87 +71,92 @@ export default function GenerationProcess({ appName, description, onReset }: Gen
           },
           body: JSON.stringify({ appName, description }),
           signal: abortController.signal
-        })
+        });
 
         if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}))
-          throw new Error(errorData.message || `HTTP error! status: ${response.status}`)
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
         }
         
-        const reader = response.body?.getReader()
-        if (!reader) throw new Error('No response body')
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error('No response body');
 
-        const decoder = new TextDecoder()
-        let buffer = ''
+        const decoder = new TextDecoder();
+        let buffer = '';
 
         while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
+          const { done, value } = await reader.read();
+          if (done) break;
 
-          buffer += decoder.decode(value, { stream: true })
-          const lines = buffer.split('\n\n')
-          buffer = lines.pop() || ''
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n\n');
+          buffer = lines.pop() || '';
 
           for (const line of lines) {
             if (line.startsWith('data: ')) {
               try {
-                const data = JSON.parse(line.slice(6))
+                const data: StreamData = JSON.parse(line.slice(6));
                 
                 if (data.error) {
-                  setError(data.error)
-                  return
+                  setError(data.error);
+                  return;
                 }
                 
                 if (data.chunk) {
-                  setIsAIThinking(false)
-                  setStreamedText(prev => prev + data.chunk)
+                  setIsAIThinking(false);
+                  setStreamedText(prev => prev + data.chunk);
                   
-                  const fileMatch = data.chunk.match(/"filePath"\s*:\s*"([^"]+)"/)
+                  const fileMatch = data.chunk.match(/"filePath"\s*:\s*"([^"]+)"/);
                   if (fileMatch) {
-                    const fileName = fileMatch[1]
-                    setCurrentFile(fileName)
+                    const fileName = fileMatch[1];
+                    setCurrentFile(fileName);
                     setFileProgress(prev => {
                       if (!prev.find(f => f.name === fileName)) {
-                        return [...prev, { name: fileName, status: 'generating' }]
+                        return [...prev, { name: fileName, status: 'generating' }];
                       }
-                      return prev
-                    })
+                      return prev;
+                    });
                   }
                 }
 
                 if (data.type === 'partial' && data.files) {
-                  setGeneratedFiles(data.files)
+                  setGeneratedFiles(data.files);
                 }
                 
                 if (data.type === 'complete' && data.files) {
-                  setGeneratedFiles(data.files)
-                  setIsComplete(true)
-                  setFileProgress(prev => prev.map(f => ({ ...f, status: 'complete' })))
-                  setCurrentFile('')
-                  setTimeout(() => setShowReview(true), 5000)
+                  setGeneratedFiles(data.files);
+                  setIsComplete(true);
+                  setFileProgress(prev => prev.map(f => ({ ...f, status: 'complete' })));
+                  setCurrentFile('');
+                  setTimeout(() => setShowReview(true), 5000);
                 }
               } catch (parseError) {
-                console.error('Error parsing SSE data:', parseError)
-                setError('Failed to parse server response')
+                console.error('Error parsing SSE data:', parseError);
+                setError('Failed to parse server response');
               }
             }
           }
         }
-      } catch (err: GenerationError) {
-        if (err.name === 'AbortError') return
-        
-        const errorMessage = err?.message || 'Generation failed. Please try again.'
-        setError(errorMessage)
-        console.error('Generation error:', err)
+      } catch (err: unknown) {
+        if (err instanceof Error) {
+          if (err.name === 'AbortError') return;
+          
+          const errorMessage = err.message || 'Generation failed. Please try again.';
+          setError(errorMessage);
+          console.error('Generation error:', err);
+        } else {
+          setError('An unexpected error occurred. Please try again.');
+          console.error('Unknown error:', err);
+        }
       }
-    }
+    };
 
-    generateCode()
+    generateCode();
 
     return () => {
-      abortController.abort()
-    }
-  }, [appName, description])
+      abortController.abort();
+    };
+  }, [appName, description]);
 
   if (showReview && generatedFiles.length > 0) {
     return (
@@ -155,7 +168,7 @@ export default function GenerationProcess({ appName, description, onReset }: Gen
           streamedText={streamedText}
         />
       </div>
-    )
+    );
   }
 
   return (
@@ -227,5 +240,5 @@ export default function GenerationProcess({ appName, description, onReset }: Gen
         </div>
       </div>
     </div>
-  )
+  );
 }
