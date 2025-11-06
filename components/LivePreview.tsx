@@ -1,11 +1,11 @@
 'use client'
 
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import type { LivePreviewProps } from '@/types'
 
 interface PreviewError {
-  message: string
-  type: 'parse' | 'runtime' | 'general'
+  message: string;
+  type: 'parse' | 'runtime' | 'general';
 }
 
 const SUPPORTED_FRAMEWORKS = {
@@ -17,7 +17,7 @@ const SUPPORTED_FRAMEWORKS = {
     ],
     css: ['https://cdn.tailwindcss.com']
   }
-}
+} as const
 
 export default function LivePreview({ streamedText, generatedFiles, appName }: LivePreviewProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
@@ -40,11 +40,9 @@ export default function LivePreview({ streamedText, generatedFiles, appName }: L
     }
 
     // Look for App component definition
-    const componentFile = generatedFiles.find((f) => 
+    return generatedFiles.find((f) => 
       /function\s+App\s*\(|const\s+App\s*=|class\s+App\s+extends/.test(f.content)
     )
-
-    return componentFile
   }, [generatedFiles])
 
   // Extract component code from stream
@@ -62,8 +60,8 @@ export default function LivePreview({ streamedText, generatedFiles, appName }: L
     }
   }, [])
 
-  // Prepare component code for preview
-  const prepareComponentCode = useCallback((code: string) => {
+  // Prepare component code for preview with memoization
+  const prepareComponentCode = useMemo(() => (code: string) => {
     // Strip imports/exports
     const stripped = code
       .replace(/import\s+.*?from\s+['"].*?['"];?\n?/g, '')
@@ -86,13 +84,14 @@ export default function LivePreview({ streamedText, generatedFiles, appName }: L
     return needsAlias ? `${stripped}\nconst App = ${detectedName};` : stripped
   }, [])
 
-  // Generate preview HTML
-  const generatePreviewHTML = useCallback((componentCode: string) => {
+  // Generate preview HTML with security measures
+  const generatePreviewHTML = useMemo(() => (componentCode: string) => {
     return `
       <!DOCTYPE html>
       <html>
       <head>
         <meta charset="UTF-8" />
+        <meta http-equiv="Content-Security-Policy" content="default-src 'self' unpkg.com cdn.tailwindcss.com; script-src 'self' 'unsafe-inline' unpkg.com; style-src 'self' 'unsafe-inline' cdn.tailwindcss.com;">
         ${SUPPORTED_FRAMEWORKS.REACT.scripts
           .map(src => `<script crossorigin src="${src}"></script>`)
           .join('\n')}
@@ -146,6 +145,7 @@ export default function LivePreview({ streamedText, generatedFiles, appName }: L
         setPreviewStatus('error')
       }
     }
+    
     window.addEventListener('message', handlePreviewError)
 
     // Get component code
@@ -161,10 +161,13 @@ export default function LivePreview({ streamedText, generatedFiles, appName }: L
 
     if (!componentCode) {
       setPreviewStatus('loading')
-      return
+      return () => window.removeEventListener('message', handlePreviewError)
     }
 
-    if (componentCode === lastCodeRef.current) return
+    if (componentCode === lastCodeRef.current) {
+      return () => window.removeEventListener('message', handlePreviewError)
+    }
+    
     lastCodeRef.current = componentCode
 
     try {
@@ -219,7 +222,7 @@ export default function LivePreview({ streamedText, generatedFiles, appName }: L
       <iframe
         ref={iframeRef}
         className="w-full h-full border-0 bg-white"
-        sandbox="allow-scripts allow-same-origin"
+        sandbox="allow-scripts"
         title="Live Preview"
         style={{ minHeight: '100%', display: previewStatus === 'loading' ? 'none' : 'block' }}
       />
