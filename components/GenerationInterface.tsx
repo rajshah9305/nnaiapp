@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, memo } from 'react'
 import GenerationProcess from './GenerationProcess'
 
 interface ValidationErrors {
@@ -8,12 +8,11 @@ interface ValidationErrors {
   description?: string;
 }
 
-export default function GenerationInterface() {
+const GenerationInterface = () => {
   const [appName, setAppName] = useState('')
   const [description, setDescription] = useState('')
   const [showProcess, setShowProcess] = useState(false)
   const [errors, setErrors] = useState<ValidationErrors>({})
-
 
   const validateForm = useCallback((): ValidationErrors => {
     const newErrors: ValidationErrors = {}
@@ -22,21 +21,36 @@ export default function GenerationInterface() {
     return newErrors
   }, [appName, description])
 
-  const handleGenerate = async () => {
+  const handleGenerate = useCallback(async () => {
     const validationErrors = validateForm()
     setErrors(validationErrors)
 
     if (Object.keys(validationErrors).length === 0) {
       setShowProcess(true)
     }
-  }
+  }, [validateForm])
 
-  const handleReset = () => {
+  const handleReset = useCallback(() => {
     setShowProcess(false)
     setAppName('')
     setDescription('')
     setErrors({})
-  }
+  }, [])
+
+  const handleInputChange = useCallback((field: 'appName' | 'description', value: string) => {
+    if (field === 'appName') {
+      setAppName(value)
+    } else {
+      setDescription(value)
+    }
+    
+    if (errors[field]) {
+      setErrors(prev => {
+        const { [field]: _, ...rest } = prev
+        return rest
+      })
+    }
+  }, [errors])
 
   if (showProcess) {
     return <GenerationProcess appName={appName} description={description} onReset={handleReset} />
@@ -55,21 +69,16 @@ export default function GenerationInterface() {
               type="text"
               id="appName"
               value={appName}
-              onChange={(e) => {
-                setAppName(e.target.value)
-                if (errors.appName) {
-                  const { appName: _, ...rest } = errors
-                  setErrors(rest)
-                }
-              }}
+              onChange={(e) => handleInputChange('appName', e.target.value)}
               placeholder="e.g., Todo App, Blog Platform, E-commerce Store"
               className={`w-full px-3 py-2 rounded-lg border text-sm
                 ${errors.appName ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-orange-500'}
                 focus:ring-2 focus:ring-opacity-50 transition-all`}
-
+              aria-invalid={!!errors.appName}
+              aria-describedby={errors.appName ? 'appName-error' : undefined}
             />
             {errors.appName && (
-              <p className="text-red-500 text-sm mt-1 animate-fade-in">
+              <p id="appName-error" className="text-red-500 text-sm mt-1 animate-fade-in" role="alert">
                 {errors.appName}
               </p>
             )}
@@ -83,21 +92,17 @@ export default function GenerationInterface() {
             <textarea
               id="description"
               value={description}
-              onChange={(e) => {
-                setDescription(e.target.value)
-                if (errors.description) {
-                  const { description: _, ...rest } = errors
-                  setErrors(rest)
-                }
-              }}
+              onChange={(e) => handleInputChange('description', e.target.value)}
               placeholder="Describe your application's features, functionality, and requirements..."
               rows={4}
               className={`w-full px-3 py-2 rounded-lg border text-sm
                 ${errors.description ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-orange-500'}
                 focus:ring-2 focus:ring-opacity-50 transition-all resize-none`}
+              aria-invalid={!!errors.description}
+              aria-describedby={errors.description ? 'description-error' : undefined}
             />
             {errors.description && (
-              <p className="text-red-500 text-sm mt-1 animate-fade-in">
+              <p id="description-error" className="text-red-500 text-sm mt-1 animate-fade-in" role="alert">
                 {errors.description}
               </p>
             )}
@@ -111,6 +116,7 @@ export default function GenerationInterface() {
               bg-orange-500 text-white hover:bg-orange-600 
               disabled:opacity-50 disabled:cursor-not-allowed
               transition-all transform active:scale-[0.98]`}
+            aria-label="Generate Application"
           >
             Generate Application
           </button>
@@ -119,3 +125,5 @@ export default function GenerationInterface() {
     </div>
   )
 }
+
+export default memo(GenerationInterface)
